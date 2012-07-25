@@ -12,11 +12,11 @@
 #include "SFML/Window.hpp"
 #include "SFML/Audio.hpp"
 
-#include "area_tex.h"
-#include "search_tex.h"
 #include "smaa_glsl.h"
 
+#ifdef __unix__
 #include "unistd.h"
+#endif
 
 /*
  * Global variables
@@ -31,6 +31,11 @@ sf::Clock the_clock;
 std::string app_path;
 #define SCREEN_WIDTH 800
 #define SCREEN_HEIGHT 600
+
+#define AREATEX_WIDTH 160
+#define AREATEX_HEIGHT 560
+#define SEARCHTEX_WIDTH 66
+#define SEARCHTEX_HEIGHT 33
 
 GLuint albedo_tex;
 GLuint edge_tex;
@@ -54,204 +59,19 @@ GLuint neighborhood_shader;
 
 void get_opengl_error( bool ignore = false );
 
-void shader_include( std::string& shader )
-{
-  size_t start_pos = 0;
-  std::string include_dir = "#include ";
+void shader_include( std::string& shader );
 
-  while( ( start_pos = shader.find( include_dir, start_pos ) ) != std::string::npos )
-  {
-    int pos = start_pos + include_dir.length() + 1;
-    int length = shader.find( "\"", pos );
-    std::string file = shader.substr( pos, length - pos );
-    std::string content = "";
+void replace_all( std::string& str, const std::string& from, const std::string& to );
 
-    std::ifstream f;
-    f.open( ( app_path + file ).c_str() );
+void create_shader( std::string* vs_text, std::string* ps_text, GLuint* program );
 
-    if( f.is_open() )
-    {
-      char buffer[1024];
+void validate_program( GLuint program );
 
-      while( !f.eof() )
-      {
-        f.getline( buffer, 1024 );
-        content += buffer;
-        content += "\n";
-      }
-    }
-	else
-	{
-		std::cerr << "Couldn't include shader file: " << app_path + file << "\n";
-		the_window.close();
-	}
+void draw_quad();
 
-    shader.replace( start_pos, ( length + 1 ) - start_pos, content );
-    start_pos += content.length();
-  }
-}
+void check_fbo();
 
-void replace_all( std::string& str, const std::string& from, const std::string& to )
-{
-  size_t start_pos = 0;
-
-  while( ( start_pos = str.find( from, start_pos ) ) != std::string::npos )
-  {
-    str.replace( start_pos, from.length(), to );
-    start_pos += to.length(); // In case 'to' contains 'from', like replacing 'x' with 'yx'
-  }
-}
-
-void create_shader( std::string* vs_text, std::string* ps_text, GLuint* program )
-{
-  GLuint shader;
-  const GLchar* text_ptr[1];
-  GLchar infolog[INFOLOG_SIZE];
-  std::string log;
-
-  shader_include( *vs_text );
-  replace_all( *vs_text, "hash ", "#" );
-  shader_include( *ps_text );
-  replace_all( *ps_text, "hash ", "#" );
-
-  *program = glCreateProgram();
-
-  //VERTEX SHADER
-  text_ptr[0] = vs_text->c_str();
-
-  shader = glCreateShader( GL_VERTEX_SHADER );
-  glShaderSource( shader, 1, text_ptr, 0 );
-  glCompileShader( shader );
-
-  glGetShaderInfoLog( shader, INFOLOG_SIZE, 0, infolog );
-  log = infolog;
-  std::cerr << log;
-
-  glAttachShader( *program, shader );
-  glDeleteShader( shader );
-
-  //PIXEL SHADER
-  text_ptr[0] = ps_text->c_str();
-
-  shader = glCreateShader( GL_FRAGMENT_SHADER );
-  glShaderSource( shader, 1, text_ptr, 0 );
-  glCompileShader( shader );
-
-  glGetShaderInfoLog( shader, INFOLOG_SIZE, 0, infolog );
-  log = infolog;
-  std::cerr << log;
-
-  glAttachShader( *program, shader );
-  glDeleteShader( shader );
-
-  //LINK
-  glLinkProgram( *program );
-
-  glGetProgramInfoLog( *program, INFOLOG_SIZE, 0, infolog );
-  log = infolog;
-  std::cerr << log;
-}
-
-void validate_program( GLuint program )
-{
-  GLchar infolog[INFOLOG_SIZE];
-  std::string log;
-
-  glValidateProgram( program );
-
-  glGetProgramInfoLog( program, INFOLOG_SIZE, 0, infolog );
-  log = infolog;
-  std::cerr << log;
-}
-
-void draw_quad()
-{
-  glBegin( GL_QUADS );
-  glTexCoord2f( 0, 0 );
-  glVertex2f( 0, 0 );
-  glTexCoord2f( 1, 0 );
-  glVertex2f( 1, 0 );
-  glTexCoord2f( 1, 1 );
-  glVertex2f( 1, 1 );
-  glTexCoord2f( 0, 1 );
-  glVertex2f( 0, 1 );
-  glEnd();
-}
-
-void check_fbo()
-{
-  if( glCheckFramebufferStatus( GL_FRAMEBUFFER ) != GL_FRAMEBUFFER_COMPLETE )
-  {
-    std::cerr << "FBO not complete.\n";
-    the_window.close();
-    exit( 1 );
-  }
-}
-
-void get_app_path()
-{
-  char fullpath[1024];
-
-  /* /proc/self is a symbolic link to the process-ID subdir
-   * of /proc, e.g. /proc/4323 when the pid of the process
-   * of this program is 4323.
-   *
-   * Inside /proc/<pid> there is a symbolic link to the
-   * executable that is running as this <pid>.  This symbolic
-   * link is called "exe".
-   *
-   * So if we read the path where the symlink /proc/self/exe
-   * points to we have the full path of the executable.
-   */
-
-#ifdef __unix__
-  int length;
-  length = readlink( "/proc/self/exe", fullpath, sizeof( fullpath ) );
-
-  /* Catch some errors: */
-
-  if( length < 0 )
-  {
-    std::cerr << "Couldnt read app path. Error resolving symlink /proc/self/exe.\n";
-    the_window.close();
-  }
-
-  if( length >= 1024 )
-  {
-    std::cerr << "Couldnt read app path. Path too long. Truncated.\n";
-    the_window.close();
-  }
-
-  /* I don't know why, but the string this readlink() function
-   * returns is appended with a '@'.
-   */
-  fullpath[length] = '\0';       /* Strip '@' off the end. */
-
-#endif
-
-#ifdef _WIN32
-
-  if( GetModuleFileName( 0, ( char* )&fullpath, sizeof( fullpath ) ) == 0 )
-  {
-    std::cerr << "Couldn't get the app path.\n";
-    the_window.close();
-  }
-
-#endif
-
-  app_path = fullpath;
-
-#ifdef _WIN32
-  app_path = app_path.substr( 0, app_path.rfind( "\\" ) + 1 );
-#endif
-
-#ifdef __unix__
-  app_path = app_path.substr( 0, app_path.rfind( "/" ) + 1 );
-#endif
-
-  //app_path += "../../";
-}
-
+void get_app_path();
 
 int main( int argc, char* args[] )
 {
@@ -277,9 +97,9 @@ int main( int argc, char* args[] )
     exit( 1 );
   }
 
-  if( !GLEW_VERSION_4_2 )
+  if( !GLEW_VERSION_3_3 )
   {
-    std::cerr << "Error: OpenGL 4.2 is required\n";
+    std::cerr << "Error: OpenGL 3.3 is required\n";
     the_window.close();
     exit( 1 );
   }
@@ -317,13 +137,22 @@ int main( int argc, char* args[] )
   glTexImage2D( GL_TEXTURE_2D, 0, GL_RGBA8, SCREEN_WIDTH, SCREEN_HEIGHT, 0, GL_RGBA, GL_FLOAT, 0 );
 
   unsigned char* buffer = 0;
-  int length = 0;
   FILE* f = 0;
 
   buffer = new unsigned char[1024 * 1024];
-  f = fopen("smaa_area.raw", "rb");
-  fread(buffer, AREATEX_WIDTH * AREATEX_HEIGHT * 2, 1, f);
-  fclose(f);
+  f = fopen( ( app_path + "smaa_area.raw" ).c_str(), "rb" ); //rb stands for "read binary file"
+
+  if( !f )
+  {
+    std::cerr << "Couldn't open smaa_area.raw.\n";
+    the_window.close();
+    exit( 1 );
+  }
+
+  fread( buffer, AREATEX_WIDTH * AREATEX_HEIGHT * 2, 1, f );
+  fclose( f );
+
+  f = 0;
 
   glGenTextures( 1, &area_tex );
   glBindTexture( GL_TEXTURE_2D, area_tex );
@@ -333,9 +162,19 @@ int main( int argc, char* args[] )
   glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR );
   glTexImage2D( GL_TEXTURE_2D, 0, GL_RG8, ( GLsizei )AREATEX_WIDTH, ( GLsizei )AREATEX_HEIGHT, 0, GL_RG, GL_UNSIGNED_BYTE, buffer );
 
-  f = fopen("smaa_search.raw", "rb");
-  fread(buffer, SEARCHTEX_WIDTH * SEARCHTEX_HEIGHT, 1, f);
-  fclose(f);
+  f = fopen( ( app_path + "smaa_search.raw" ).c_str(), "rb" );
+
+  if( !f )
+  {
+    std::cerr << "Couldn't open smaa_search.raw.\n";
+    the_window.close();
+    exit( 1 );
+  }
+
+  fread( buffer, SEARCHTEX_WIDTH * SEARCHTEX_HEIGHT, 1, f );
+  fclose( f );
+
+  f = 0;
 
   glGenTextures( 1, &search_tex );
   glBindTexture( GL_TEXTURE_2D, search_tex );
@@ -419,7 +258,7 @@ int main( int argc, char* args[] )
   validate_program( blend_shader );
 
   get_opengl_error();
-  
+
   /*
    * NEIGHBORHOOD SHADER
    */
@@ -466,7 +305,6 @@ int main( int argc, char* args[] )
   glClear( GL_COLOR_BUFFER_BIT );
 
   glPushMatrix();
-  //glTranslatef(0.5f, 0.5f, 0.0f);
   glBegin( GL_QUADS );
   glColor3f( 0, 0, 0 );
   glVertex2f( 0, 0 );
@@ -555,7 +393,7 @@ int main( int argc, char* args[] )
     glUseProgram( 0 );
 
     glBindFramebuffer( GL_FRAMEBUFFER, 0 );
-    
+
     /*
      * NEIGHBORHOOD BLENDING PASS
      */
@@ -567,11 +405,11 @@ int main( int argc, char* args[] )
     glActiveTexture( GL_TEXTURE1 );
     glBindTexture( GL_TEXTURE_2D, blend_tex );
 
-	glEnable(GL_FRAMEBUFFER_SRGB);
+    glEnable( GL_FRAMEBUFFER_SRGB );
 
     draw_quad();
 
-	glDisable(GL_FRAMEBUFFER_SRGB);
+    glDisable( GL_FRAMEBUFFER_SRGB );
 
     glUseProgram( 0 );
 
@@ -584,19 +422,21 @@ int main( int argc, char* args[] )
     glBindTexture( GL_TEXTURE_2D, blend_tex );
     //glBindTexture( GL_TEXTURE_2D, albedo_tex );
 
+    //uncomment this to see the result of one of the passes
     //draw_quad();
 
-	/*
-	 * Show the result
-	 */
+    /*
+     * Show the result
+     */
 
     the_window.display();
 
+    //some benchmarking :D
     frames++;
 
-	if( the_clock.getElapsedTime().asMilliseconds() > 1000.0f )
+    if( the_clock.getElapsedTime().asMilliseconds() > 1000.0f )
     {
-	  int timepassed = the_clock.getElapsedTime().asMilliseconds();
+      int timepassed = the_clock.getElapsedTime().asMilliseconds();
       fps = 1000.0f / ( ( float ) timepassed / ( float ) frames );
       std::cout << "FPS: " << fps << " Time: " << ( float ) timepassed / ( float ) frames << "\n";
       frames = 0;
@@ -606,6 +446,216 @@ int main( int argc, char* args[] )
   }
 
   return 0;
+}
+
+/*
+ * Function definitions, not that important
+ */
+
+//this function grabs the app path, so that we can load the needed files at runtime
+void get_app_path()
+{
+  char fullpath[1024];
+
+  /* /proc/self is a symbolic link to the process-ID subdir
+   * of /proc, e.g. /proc/4323 when the pid of the process
+   * of this program is 4323.
+   *
+   * Inside /proc/<pid> there is a symbolic link to the
+   * executable that is running as this <pid>.  This symbolic
+   * link is called "exe".
+   *
+   * So if we read the path where the symlink /proc/self/exe
+   * points to we have the full path of the executable.
+   */
+
+#ifdef __unix__
+  int length;
+  length = readlink( "/proc/self/exe", fullpath, sizeof( fullpath ) );
+
+  /* Catch some errors: */
+
+  if( length < 0 )
+  {
+    std::cerr << "Couldnt read app path. Error resolving symlink /proc/self/exe.\n";
+    the_window.close();
+  }
+
+  if( length >= 1024 )
+  {
+    std::cerr << "Couldnt read app path. Path too long. Truncated.\n";
+    the_window.close();
+  }
+
+  /* I don't know why, but the string this readlink() function
+   * returns is appended with a '@'.
+   */
+  fullpath[length] = '\0';       /* Strip '@' off the end. */
+
+#endif
+
+#ifdef _WIN32
+
+  if( GetModuleFileName( 0, ( char* )&fullpath, sizeof( fullpath ) ) == 0 )
+  {
+    std::cerr << "Couldn't get the app path.\n";
+    the_window.close();
+  }
+
+#endif
+
+  app_path = fullpath;
+
+#ifdef _WIN32
+  app_path = app_path.substr( 0, app_path.rfind( "\\" ) + 1 );
+  //when the exe is located in {source}/build/Debug/smaa.exe and we need the {source}
+  app_path += "../../";
+#endif
+
+#ifdef __unix__
+  app_path = app_path.substr( 0, app_path.rfind( "/" ) + 1 );
+  //when the exe is located in {source}/build/smaa and we need the {source}
+  app_path += "../";
+#endif
+}
+
+//this function adds #include functionality to GLSL
+void shader_include( std::string& shader )
+{
+  size_t start_pos = 0;
+  std::string include_dir = "#include ";
+
+  while( ( start_pos = shader.find( include_dir, start_pos ) ) != std::string::npos )
+  {
+    int pos = start_pos + include_dir.length() + 1;
+    int length = shader.find( "\"", pos );
+    std::string file = shader.substr( pos, length - pos );
+    std::string content = "";
+
+    std::ifstream f;
+    f.open( ( app_path + file ).c_str() );
+
+    if( f.is_open() )
+    {
+      char buffer[1024];
+
+      while( !f.eof() )
+      {
+        f.getline( buffer, 1024 );
+        content += buffer;
+        content += "\n";
+      }
+    }
+    else
+    {
+      std::cerr << "Couldn't include shader file: " << app_path + file << "\n";
+      the_window.close();
+    }
+
+    shader.replace( start_pos, ( length + 1 ) - start_pos, content );
+    start_pos += content.length();
+  }
+}
+
+//replaces all occurances of a string in another string
+void replace_all( std::string& str, const std::string& from, const std::string& to )
+{
+  size_t start_pos = 0;
+
+  while( ( start_pos = str.find( from, start_pos ) ) != std::string::npos )
+  {
+    str.replace( start_pos, from.length(), to );
+    start_pos += to.length(); // In case 'to' contains 'from', like replacing 'x' with 'yx'
+  }
+}
+
+//do all the create and compile stuff that shaders need
+void create_shader( std::string* vs_text, std::string* ps_text, GLuint* program )
+{
+  GLuint shader;
+  const GLchar* text_ptr[1];
+  GLchar infolog[INFOLOG_SIZE];
+  std::string log;
+
+  shader_include( *vs_text );
+  replace_all( *vs_text, "hash ", "#" );
+  shader_include( *ps_text );
+  replace_all( *ps_text, "hash ", "#" );
+
+  *program = glCreateProgram();
+
+  //VERTEX SHADER
+  text_ptr[0] = vs_text->c_str();
+
+  shader = glCreateShader( GL_VERTEX_SHADER );
+  glShaderSource( shader, 1, text_ptr, 0 );
+  glCompileShader( shader );
+
+  glGetShaderInfoLog( shader, INFOLOG_SIZE, 0, infolog );
+  log = infolog;
+  std::cerr << log;
+
+  glAttachShader( *program, shader );
+  glDeleteShader( shader );
+
+  //PIXEL SHADER
+  text_ptr[0] = ps_text->c_str();
+
+  shader = glCreateShader( GL_FRAGMENT_SHADER );
+  glShaderSource( shader, 1, text_ptr, 0 );
+  glCompileShader( shader );
+
+  glGetShaderInfoLog( shader, INFOLOG_SIZE, 0, infolog );
+  log = infolog;
+  std::cerr << log;
+
+  glAttachShader( *program, shader );
+  glDeleteShader( shader );
+
+  //LINK
+  glLinkProgram( *program );
+
+  glGetProgramInfoLog( *program, INFOLOG_SIZE, 0, infolog );
+  log = infolog;
+  std::cerr << log;
+}
+
+//this needs to be a separate step, as we need to set uniforms etc.
+void validate_program( GLuint program )
+{
+  GLchar infolog[INFOLOG_SIZE];
+  std::string log;
+
+  glValidateProgram( program );
+
+  glGetProgramInfoLog( program, INFOLOG_SIZE, 0, infolog );
+  log = infolog;
+  std::cerr << log;
+}
+
+//draws a full-screen quad
+void draw_quad()
+{
+  glBegin( GL_QUADS );
+  glTexCoord2f( 0, 0 );
+  glVertex2f( 0, 0 );
+  glTexCoord2f( 1, 0 );
+  glVertex2f( 1, 0 );
+  glTexCoord2f( 1, 1 );
+  glVertex2f( 1, 1 );
+  glTexCoord2f( 0, 1 );
+  glVertex2f( 0, 1 );
+  glEnd();
+}
+
+void check_fbo()
+{
+  if( glCheckFramebufferStatus( GL_FRAMEBUFFER ) != GL_FRAMEBUFFER_COMPLETE )
+  {
+    std::cerr << "FBO not complete.\n";
+    the_window.close();
+    exit( 1 );
+  }
 }
 
 void get_opengl_error( bool ignore )
@@ -676,4 +726,3 @@ void get_opengl_error( bool ignore )
     return;
   }
 }
-// kate: indent-mode cstyle; indent-width 2; replace-tabs on; 

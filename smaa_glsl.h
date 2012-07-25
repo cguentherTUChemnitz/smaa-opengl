@@ -1,7 +1,7 @@
 #define STRINGIFY(s) #s
 
 std::string header_vs = 
-"#version 420 compatibility\n\
+"#version 330 compatibility\n\
  #ifndef SMAA_PIXEL_SIZE\n\
  #define SMAA_PIXEL_SIZE vec2(1.0 / 800.0, 1.0 / 600.0)\n\
  #endif\n\
@@ -12,7 +12,7 @@ std::string header_vs =
 ";
 
 std::string header_ps = 
-"#version 420 compatibility\n\
+"#version 330 compatibility\n\
  #ifndef SMAA_PIXEL_SIZE\n\
  #define SMAA_PIXEL_SIZE vec2(1.0 / 800.0, 1.0 / 600.0)\n\
  #endif\n\
