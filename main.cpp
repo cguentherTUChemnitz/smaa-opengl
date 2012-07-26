@@ -32,6 +32,8 @@ std::string app_path;
 #define SCREEN_WIDTH 800
 #define SCREEN_HEIGHT 600
 
+bool do_effect = true;
+
 #define AREATEX_WIDTH 160
 #define AREATEX_HEIGHT 560
 #define SEARCHTEX_WIDTH 66
@@ -97,9 +99,9 @@ int main( int argc, char* args[] )
     exit( 1 );
   }
 
-  if( !GLEW_VERSION_3_3 )
+  if( !GLEW_VERSION_4_1 )
   {
-    std::cerr << "Error: OpenGL 3.3 is required\n";
+    std::cerr << "Error: OpenGL 4.1 is required\n";
     the_window.close();
     exit( 1 );
   }
@@ -348,6 +350,18 @@ int main( int argc, char* args[] )
         the_window.close();
         exit( 0 );
       }
+      else if( the_event.type == sf::Event::KeyPressed )
+      {
+        if( the_event.key.code == sf::Keyboard::Escape )
+        {
+          the_window.close();
+          exit( 0 );
+        }
+        else if( the_event.key.code == sf::Keyboard::Space )
+        {
+          do_effect = !do_effect;
+        }
+      }
     }
 
     /*
@@ -412,6 +426,17 @@ int main( int argc, char* args[] )
     glDisable( GL_FRAMEBUFFER_SRGB );
 
     glUseProgram( 0 );
+
+    /*
+     * Toggle effect
+     */
+
+    if( !do_effect )
+    {
+      glActiveTexture( GL_TEXTURE0 );
+      glBindTexture( GL_TEXTURE_2D, albedo_tex );
+      draw_quad();
+    }
 
     /*
      * Debugging

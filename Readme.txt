@@ -6,3 +6,5 @@ Do not use block interfaces for the out variables when you are implementing this
 It will probably crash the video card driver. I've reported the issue to AMD, they'll probably fix this soon. 
 See:
 http://devgurus.amd.com/thread/159290
+
+You can toggle the effect by pressing space, and exit with either clicking "x" or pressing escape.
