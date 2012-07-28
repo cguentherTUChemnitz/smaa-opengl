@@ -8,3 +8,12 @@ See:
 http://devgurus.amd.com/thread/159290
 
 You can toggle the effect by pressing space, and exit with either clicking "x" or pressing escape.
+
+This demo should be built in a sub directory:
+
+*cd to this directory*
+mkdir build
+cd build
+cmake ..
+make
+./smaa
