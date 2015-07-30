@@ -20,6 +20,9 @@ endif()
 include_directories(${CMAKE_SOURCE_DIR}/src/)
 link_directories(${CMAKE_SOURCE_DIR}/src/)
 
+#search for external dependencies
+find_package(SFML REQUIRED)
+
 #put depencencies here
 include_directories(${CMAKE_SOURCE_DIR}/external/include/)
 link_directories(${CMAKE_SOURCE_DIR}/external/lib/)
@@ -36,3 +39,4 @@ endif()
 add_executable(${project_name} main)
 
 target_link_libraries(${project_name} ${${project_name}_external_libs})
+
